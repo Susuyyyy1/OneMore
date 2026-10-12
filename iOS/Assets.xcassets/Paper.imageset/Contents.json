@@ -1,0 +1,7 @@
+{
+  "images" : [
+    { "filename" : "paper-light.jpg", "idiom" : "universal" },
+    { "appearances" : [ { "appearance" : "luminosity", "value" : "dark" } ], "filename" : "paper-dark.jpg", "idiom" : "universal" }
+  ],
+  "info" : { "author" : "xcode", "version" : 1 }
+}

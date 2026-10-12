@@ -1,0 +1,9 @@
+// 签名配置（重新生成项目不会覆盖这里）
+//
+// ONEMORE_TEAM：你的开发团队 ID。在 Xcode → Settings → Accounts 登录 Apple ID 后，
+//   免费账号会有一个 “Personal Team”。不知道 ID 的话先留空，在 Xcode 里给两个 target
+//   选好 Team，再用 README 里的命令查到 ID 写回这里。
+// BUNDLE_ID_PREFIX：bundle ID 前缀，必须全世界唯一，改成你自己的（例如 com.你的名字拼音）。
+
+ONEMORE_TEAM =
+BUNDLE_ID_PREFIX = com.example
