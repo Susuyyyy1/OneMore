@@ -159,28 +159,8 @@ Tests/                 单元测试
 tools/                 图标和纸张背景生成脚本
 ```
 
-### 运行测试
 
-```bash
-xcodebuild -project OneMore.xcodeproj -scheme OneMore -destination 'platform=iOS Simulator,name=iPhone 17' test
-```
 
-### 演示数据（截图用）
-Debug 版本加上启动参数 `-demo`，会在空数据库里生成几次示例训练和一个模板。手表还支持 `-demoScreen home|active|logger|rest|summary`，可以直接打开对应的页面。
-
-```bash
-xcrun simctl launch booted <bundle id 前缀>.onemore -demo
-```
-
-### 重新生成图标和纸张背景
-
-```bash
-swift tools/make-icon.swift iOS/Assets.xcassets/AppIcon.appiconset/AppIcon.png
-```
-
-```bash
-swiftc -O tools/make-paper.swift -o /tmp/make-paper && /tmp/make-paper iOS/Assets.xcassets/Paper.imageset
-```
 
 ### 同步机制
 - 单条记录（训练、模板、动作设置）用 `transferUserInfo` 发送，系统会排队保证送达，对方 app 没开也能收到；每次启动还会补发上次之后改动过的记录。
