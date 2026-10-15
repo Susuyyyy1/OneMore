@@ -116,6 +116,10 @@ struct PhoneWorkoutView: View {
         }
         .interactiveDismissDisabled(isBackfill)
         .onDisappear { if discardOnClose { ops.discard(workout) } }
+        .task {
+            // 开始训练时就请求通知权限，切到别的 app 时才能收到休息结束的提醒
+            if !isBackfill { await PhoneRestTimer.shared.requestAuthorizationIfNeeded() }
+        }
         .onAppear {
             if isBackfill, let end = workout.endedAt {
                 durationMinutes = max(10, Int(end.timeIntervalSince(workout.startedAt) / 60))

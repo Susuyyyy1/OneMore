@@ -7,6 +7,7 @@ import UniformTypeIdentifiers
 struct SettingsView: View {
     @Environment(\.modelContext) private var context
     @ObservedObject private var sync = SyncService.shared
+    @ObservedObject private var restTimer = PhoneRestTimer.shared
     @AppStorage(SettingsKey.unit) private var unitRaw = WeightUnit.kg.rawValue
     @AppStorage(SettingsKey.restPresets) private var presetsRaw = AppSettings.encodePresets(AppSettings.defaultPresets)
     @AppStorage(SettingsKey.defaultRest) private var defaultRest = 120
@@ -58,6 +59,19 @@ struct SettingsView: View {
                     Text("组间休息快捷时长")
                 } footer: {
                     Text("手表上记完一组后会显示这些按钮，点一下开始倒计时。每个动作会单独记住你上次选的时长。")
+                }
+
+                Section {
+                    LabeledContent("休息结束通知", value: notificationText)
+                    if restTimer.notificationStatus == .notDetermined {
+                        Button("允许通知") { Task { await restTimer.requestAuthorizationIfNeeded() } }
+                    } else if restTimer.notificationsBlocked {
+                        Button("去系统设置开启") { PhoneRestTimer.openNotificationSettings() }
+                    }
+                } header: {
+                    Text("通知")
+                } footer: {
+                    Text("在手机上休息倒计时时，切到别的 app 也会在灵动岛和锁屏显示剩余时间，时间到了会弹通知提醒。开着专注模式时，请把 One More 加入允许通知的 app。")
                 }
 
                 Section("与手表同步") {
@@ -131,6 +145,14 @@ struct SettingsView: View {
             } message: {
                 Text(message ?? "")
             }
+        }
+    }
+
+    private var notificationText: String {
+        switch restTimer.notificationStatus {
+        case .authorized, .provisional, .ephemeral: "已开启"
+        case .denied: "已关闭"
+        default: "未设置"
         }
     }
 

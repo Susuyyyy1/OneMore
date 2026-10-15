@@ -22,7 +22,7 @@ enum BackupExporter {
 
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyy-MM-dd HH:mm"
-        var lines = ["日期,训练,动作,部位,组序号,热身,重量(kg),次数,时长(秒),距离(米),RPE,休息(秒),个人最佳,备注"]
+        var lines = ["日期,训练,动作,部位,组序号,热身,重量(kg),次数,递减(kg×次),时长(秒),距离(米),RPE,休息(秒),个人最佳,备注"]
         for w in workouts {
             for we in w.orderedExercises {
                 let ex = exercises[we.exerciseId]
@@ -31,6 +31,8 @@ enum BackupExporter {
                         dateFormatter.string(from: w.startedAt), w.title, ex?.nameZh ?? we.exerciseId,
                         ex?.muscleGroup.displayName ?? "", "\(i + 1)", s.isWarmup ? "是" : "",
                         s.weightKg.map { Fmt.number($0, maxFraction: 2) } ?? "", s.reps.map(String.init) ?? "",
+                        s.drops.map { "\($0.weightKg.map { Fmt.number($0, maxFraction: 2) } ?? "")×\($0.reps.map(String.init) ?? "")" }
+                            .joined(separator: " → "),
                         s.durationSec.map(String.init) ?? "", s.distanceM.map { Fmt.number($0, maxFraction: 0) } ?? "",
                         s.rpe.map { Fmt.number($0) } ?? "", s.restSec.map(String.init) ?? "",
                         s.prKinds.map(\.displayName).joined(separator: "/"), s.note,

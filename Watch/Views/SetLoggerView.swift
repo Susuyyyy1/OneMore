@@ -7,6 +7,14 @@ struct SetInput: Equatable {
     var reps: Double = 10
     var duration: Double = 60
     var distanceKm: Double = 0
+    /// 递减组的后续各段（重量以当前单位显示）
+    var drops: [Drop] = []
+
+    struct Drop: Equatable, Identifiable {
+        var id = UUID()
+        var weight: Double
+        var reps: Double
+    }
 
     init() {}
 
@@ -15,7 +23,10 @@ struct SetInput: Equatable {
         reps = Double(v.reps ?? 10)
         duration = Double(v.durationSec ?? 60)
         distanceKm = (v.distanceM ?? 0) / 1000
+        drops = v.drops.map { Drop(weight: (unit.fromKg($0.weightKg ?? 0) * 10).rounded() / 10, reps: Double($0.reps ?? 10)) }
     }
+
+    static func supportsDrops(_ ex: Exercise) -> Bool { ex.showsWeight && ex.logType.usesReps }
 
     func values(for ex: Exercise, unit: WeightUnit, isWarmup: Bool) -> SetValues {
         var v = SetValues(isWarmup: isWarmup)
@@ -23,11 +34,25 @@ struct SetInput: Equatable {
         if ex.logType.usesReps { v.reps = Int(reps.rounded()) }
         if ex.logType.usesDuration { v.durationSec = Int(duration.rounded()) }
         if ex.logType.usesDistance, distanceKm > 0 { v.distanceM = distanceKm * 1000 }
+        if Self.supportsDrops(ex) {
+            v.drops = drops.map { DropStage(weightKg: $0.weight > 0 ? unit.toKg($0.weight) : nil, reps: Int($0.reps.rounded())) }
+        }
         return v
+    }
+
+    /// 加一段递减：重量减半（对齐到步进），次数与上一段相同
+    mutating func addDrop(step: Double) {
+        let lastWeight = drops.last?.weight ?? weight
+        let lastReps = drops.last?.reps ?? reps
+        let half = max(step, ((lastWeight / 2) / step).rounded() * step)
+        drops.append(Drop(weight: min(half, lastWeight), reps: lastReps))
     }
 }
 
-enum InputField: Hashable { case weight, reps, duration, distance }
+enum InputField: Hashable {
+    case weight, reps, duration, distance
+    case dropWeight(UUID), dropReps(UUID)
+}
 
 /// 输入区：根据动作类型显示重量 / 次数 / 时间 / 距离
 struct SetInputFields: View {
@@ -58,7 +83,43 @@ struct SetInputFields: View {
                 CrownField(title: "距离 km（可不填）", value: $input.distanceKm, step: 0.1, range: 0...100,
                            format: { $0 > 0 ? Fmt.number($0, maxFraction: 1) : "—" }, focus: focus, field: .distance)
             }
+            if SetInput.supportsDrops(exercise) {
+                dropRows
+            }
         }
+    }
+
+    /// 递减组：每一段一行（重量、次数、删除），下面一个“＋”按钮再加一段
+    @ViewBuilder
+    private var dropRows: some View {
+        let step = unit.step(forKgStep: exercise.weightStepKg)
+        ForEach($input.drops) { $d in
+            HStack(spacing: 4) {
+                Image(systemName: "arrow.turn.right.down")
+                    .font(.caption2)
+                    .foregroundStyle(Theme.accent)
+                CrownField(title: "递减 \(unit.rawValue)", value: $d.weight, step: step, range: 0...999,
+                           format: { Fmt.number($0, maxFraction: 2) }, focus: focus, field: .dropWeight(d.id))
+                CrownField(title: "次数", value: $d.reps, step: 1, range: 0...300,
+                           format: { "\(Int($0.rounded()))" }, focus: focus, field: .dropReps(d.id))
+                Button {
+                    input.drops.removeAll { $0.id == d.id }
+                } label: {
+                    Image(systemName: "xmark").font(.caption2.weight(.bold))
+                }
+                .buttonStyle(.plain)
+                .frame(width: 20)
+                .foregroundStyle(.secondary)
+            }
+        }
+        Button {
+            input.addDrop(step: step)
+        } label: {
+            Label(input.drops.isEmpty ? "递减组" : "再加一段", systemImage: "plus")
+                .font(.caption)
+        }
+        .buttonStyle(.glass)
+        .controlSize(.mini)
     }
 }
 

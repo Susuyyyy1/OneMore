@@ -15,6 +15,8 @@ struct SetDTO: Codable, Equatable {
     var completedAt: Date
     var restSec: Int?
     var prKinds: [String]
+    /// 递减组的后续各段；旧版本的数据没有这个字段
+    var drops: [DropStage]?
 }
 
 struct WorkoutExerciseDTO: Codable, Equatable {

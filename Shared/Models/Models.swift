@@ -157,6 +157,8 @@ final class SetEntry {
     /// 这一组之后选择的休息时长
     var restSec: Int?
     var prKindsRaw: [String]
+    /// 递减组的后续各段（JSON），没有递减时为 nil
+    var dropsData: Data?
     var workoutExercise: WorkoutExercise?
 
     init(id: UUID = UUID(), order: Int, values: SetValues, completedAt: Date = .now) {
@@ -172,16 +174,26 @@ final class SetEntry {
         self.completedAt = completedAt
         self.restSec = nil
         self.prKindsRaw = []
+        self.dropsData = values.drops.isEmpty ? nil : try? JSONEncoder().encode(values.drops)
+    }
+
+    var drops: [DropStage] {
+        get { dropsData.flatMap { try? JSONDecoder().decode([DropStage].self, from: $0) } ?? [] }
+        set { dropsData = newValue.isEmpty ? nil : try? JSONEncoder().encode(newValue) }
     }
 
     var values: SetValues {
-        get { SetValues(weightKg: weightKg, reps: reps, durationSec: durationSec, distanceM: distanceM, isWarmup: isWarmup) }
+        get {
+            SetValues(weightKg: weightKg, reps: reps, durationSec: durationSec, distanceM: distanceM,
+                      isWarmup: isWarmup, drops: drops)
+        }
         set {
             weightKg = newValue.weightKg
             reps = newValue.reps
             durationSec = newValue.durationSec
             distanceM = newValue.distanceM
             isWarmup = newValue.isWarmup
+            drops = newValue.drops
         }
     }
 

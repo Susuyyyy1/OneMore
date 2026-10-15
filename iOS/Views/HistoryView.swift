@@ -379,6 +379,13 @@ struct PhoneSetEditView: View {
     @State private var isWarmup = false
     @State private var rpe: Double = 0
     @State private var note = ""
+    @State private var drops: [EditDrop] = []
+
+    struct EditDrop: Identifiable {
+        let id = UUID()
+        var weight: Double?
+        var reps: Int
+    }
 
     var body: some View {
         let unit = WeightUnit(raw: unitRaw)
@@ -417,6 +424,34 @@ struct PhoneSetEditView: View {
                     }
                     Toggle("热身组", isOn: $isWarmup)
                 }
+                if ex.logType.supportsWeight && ex.logType.usesReps {
+                    Section {
+                        ForEach($drops) { $d in
+                            HStack {
+                                Text("第 \((drops.firstIndex { $0.id == d.id } ?? 0) + 2) 段")
+                                    .foregroundStyle(Theme.inkSecondary)
+                                TextField(unit.rawValue, value: $d.weight, format: .number)
+                                    .keyboardType(.decimalPad)
+                                    .multilineTextAlignment(.trailing)
+                                    .frame(maxWidth: 80)
+                                Text(unit.rawValue).foregroundStyle(Theme.inkSecondary)
+                                Stepper("× \(d.reps)", value: $d.reps, in: 0...300)
+                            }
+                        }
+                        .onDelete { drops.remove(atOffsets: $0) }
+                        Button {
+                            let last = drops.last
+                            let base = last?.weight ?? weight ?? 0
+                            drops.append(EditDrop(weight: base > 0 ? (base / 2 * 10).rounded() / 10 : nil, reps: last?.reps ?? reps))
+                        } label: {
+                            Label("加一段递减", systemImage: "plus")
+                        }
+                    } header: {
+                        Text("递减组")
+                    } footer: {
+                        Text("第一段是上面的重量和次数。整组算作一组，容量把每一段都算进去。左滑可以删掉某一段。")
+                    }
+                }
                 Section {
                     Picker("主观强度 RPE", selection: $rpe) {
                         Text("不记录").tag(0.0)
@@ -447,6 +482,7 @@ struct PhoneSetEditView: View {
         isWarmup = s.isWarmup
         rpe = s.rpe ?? 0
         note = s.note
+        drops = s.drops.map { EditDrop(weight: $0.weightKg.map { (unit.fromKg($0) * 100).rounded() / 100 }, reps: $0.reps ?? 0) }
     }
 
     private func save(unit: WeightUnit) {
@@ -456,6 +492,9 @@ struct PhoneSetEditView: View {
         if ex.logType.usesReps { v.reps = reps }
         if ex.logType.usesDuration { v.durationSec = minutes * 60 + seconds }
         if ex.logType.usesDistance, let distanceKm, distanceKm > 0 { v.distanceM = distanceKm * 1000 }
+        if ex.logType.supportsWeight && ex.logType.usesReps {
+            v.drops = drops.map { DropStage(weightKg: ($0.weight ?? 0) > 0 ? unit.toKg($0.weight!) : nil, reps: $0.reps) }
+        }
         target.entry.values = v
         target.entry.rpe = rpe > 0 ? rpe : nil
         target.entry.note = note

@@ -161,3 +161,34 @@ final class HeatmapTests: XCTestCase {
         XCTAssertEqual(TrainingHeatmap.level(sets: 30, maxSets: 20), 4)
     }
 }
+
+final class DropSetTests: XCTestCase {
+    private let dropSet = SetValues(weightKg: 6, reps: 12, drops: [DropStage(weightKg: 3, reps: 12)])
+
+    func testVolumeCountsEveryStage() {
+        XCTAssertEqual(WorkoutStats.volumeKg([dropSet]), 6 * 12 + 3 * 12, accuracy: 0.001)
+        XCTAssertEqual(WorkoutStats.workingSetCount([dropSet]), 1, "递减组整体算一组")
+    }
+
+    func testFormatting() {
+        XCTAssertEqual(Fmt.set(dropSet, logType: .weightReps, unit: .kg), "6kg × 12 → 3kg × 12")
+        let three = SetValues(weightKg: 10, reps: 10, drops: [DropStage(weightKg: 7.5, reps: 8), DropStage(weightKg: 5, reps: 6)])
+        XCTAssertEqual(Fmt.set(three, logType: .weightReps, unit: .kg), "10kg × 10 → 7.5kg × 8 → 5kg × 6")
+    }
+
+    func testPersonalBestUsesFirstStage() {
+        let bests = PRCalculator.bests(from: [dropSet], logType: .weightReps)
+        XCTAssertEqual(bests.maxWeight, 6)
+    }
+
+    func testPrefillKeepsDropStructure() {
+        let v = Prefill.next(current: [dropSet], previousSession: [], target: nil, logType: .weightReps, equipment: .dumbbell)
+        XCTAssertEqual(v.drops, dropSet.drops)
+    }
+
+    func testOldBackupWithoutDropsStillDecodes() throws {
+        let json = #"{"id":"8C0E2D7E-6C1B-4C59-9A3B-5A8D2B0F9E11","order":0,"weightKg":60,"reps":10,"isWarmup":false,"note":"","completedAt":0,"prKinds":[]}"#
+        let dto = try DTOCoding.decoder().decode(SetDTO.self, from: Data(json.utf8))
+        XCTAssertNil(dto.drops)
+    }
+}

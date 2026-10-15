@@ -21,6 +21,14 @@ struct PhoneSetLoggerView: View {
     @State private var restContext: RestContext?
     @State private var editing: SetEditTarget?
     @State private var recordBanner: [PRKind] = []
+    /// 递减组的后续各段（重量以当前单位显示）
+    @State private var drops: [DropInput] = []
+
+    struct DropInput: Identifiable {
+        let id = UUID()
+        var weight: Double
+        var reps: Double
+    }
 
     struct RestContext: Identifiable {
         let id = UUID()
@@ -45,7 +53,7 @@ struct PhoneSetLoggerView: View {
                 .sheet(item: $restContext) { ctx in
                     PhoneRestPanel(exercise: exercise, records: ctx.records) { seconds in
                         ops.recordRest(seconds: seconds, exercise: exercise, after: ctx.set)
-                        PhoneRestTimer.shared.start(seconds: seconds)
+                        PhoneRestTimer.shared.start(seconds: seconds, exerciseName: exercise.nameZh)
                     }
                     .presentationDetents([.medium])
                 }
@@ -96,6 +104,9 @@ struct PhoneSetLoggerView: View {
                     if ex.logType.usesReps {
                         NumberStepper(title: ex.isUnilateral ? "次数（每侧）" : "次数", value: $reps,
                                       step: 1, range: 0...300, editable: true, format: { "\(Int($0.rounded()))" })
+                    }
+                    if supportsDrops(ex) {
+                        dropSection(ex)
                     }
                     if ex.logType.usesDuration {
                         NumberStepper(title: ex.isUnilateral ? "时间（每侧）" : "时间", value: $duration,
@@ -163,6 +174,57 @@ struct PhoneSetLoggerView: View {
         .navigationBarTitleDisplayMode(.inline)
     }
 
+    // MARK: 递减组
+
+    private func supportsDrops(_ ex: Exercise) -> Bool { ex.showsWeight && ex.logType.usesReps }
+
+    /// 递减的每一段：重量 + 次数，可以删掉；下面的按钮再加一段
+    @ViewBuilder
+    private func dropSection(_ ex: Exercise) -> some View {
+        let step = unit.step(forKgStep: ex.weightStepKg)
+        ForEach($drops) { $d in
+            let index = (drops.firstIndex { $0.id == d.id } ?? 0) + 1
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Label("递减第 \(index) 段", systemImage: "arrow.turn.right.down")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Theme.tint)
+                    Spacer()
+                    Button {
+                        withAnimation { drops.removeAll { $0.id == d.id } }
+                    } label: {
+                        Image(systemName: "xmark.circle.fill").foregroundStyle(Theme.inkSecondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+                HStack(spacing: 10) {
+                    CompactStepper(title: unit.rawValue, value: $d.weight, step: step, range: 0...999,
+                                   format: { Fmt.number($0, maxFraction: 2) })
+                    CompactStepper(title: "次", value: $d.reps, step: 1, range: 0...300,
+                                   format: { "\(Int($0.rounded()))" })
+                }
+            }
+            .padding(12)
+            .background(RoundedRectangle(cornerRadius: 18).fill(Theme.ink.opacity(0.04)))
+        }
+        Button {
+            withAnimation { addDrop(step: step) }
+        } label: {
+            Label(drops.isEmpty ? "递减组：加一段" : "再加一段递减", systemImage: "plus")
+                .font(.subheadline.weight(.medium))
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.glass)
+    }
+
+    /// 新的一段默认重量减半（对齐到步进）、次数与上一段相同
+    private func addDrop(step: Double) {
+        let lastWeight = drops.last?.weight ?? weight
+        let lastReps = drops.last?.reps ?? reps
+        let half = max(step, ((lastWeight / 2) / step).rounded() * step)
+        drops.append(DropInput(weight: min(half, lastWeight), reps: lastReps))
+    }
+
     private func prefill(_ ex: Exercise) {
         didPrefill = true
         let history = HistoryService(context: context)
@@ -180,6 +242,10 @@ struct PhoneSetLoggerView: View {
         reps = Double(v.reps ?? 10)
         duration = Double(v.durationSec ?? 60)
         distanceKm = (v.distanceM ?? 0) / 1000
+        // 上一组是递减组的话，这一组沿用同样的结构
+        drops = supportsDrops(ex) ? v.drops.map {
+            DropInput(weight: (unit.fromKg($0.weightKg ?? 0) * 100).rounded() / 100, reps: Double($0.reps ?? Int(reps)))
+        } : []
     }
 
     private func logSet(_ ex: Exercise) {
@@ -188,6 +254,9 @@ struct PhoneSetLoggerView: View {
         if ex.logType.usesReps { v.reps = Int(reps.rounded()) }
         if ex.logType.usesDuration { v.durationSec = Int(duration.rounded()) }
         if ex.logType.usesDistance, distanceKm > 0 { v.distanceM = distanceKm * 1000 }
+        if supportsDrops(ex) {
+            v.drops = drops.map { DropStage(weightKg: $0.weight > 0 ? unit.toKg($0.weight) : nil, reps: Int($0.reps.rounded())) }
+        }
 
         let date: Date
         if isBackfill {
@@ -213,6 +282,44 @@ struct PhoneSetLoggerView: View {
         } else {
             restContext = RestContext(set: result.set, records: result.records)
         }
+    }
+}
+
+/// 递减组里用的紧凑版 − 数值 +
+struct CompactStepper: View {
+    let title: String
+    @Binding var value: Double
+    let step: Double
+    let range: ClosedRange<Double>
+    let format: (Double) -> String
+
+    private func snap(_ raw: Double) -> Double {
+        let snapped = range.lowerBound + ((raw - range.lowerBound) / step).rounded() * step
+        return (min(max(snapped, range.lowerBound), range.upperBound) * 1000).rounded() / 1000
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            button("minus") { value = snap(value - step) }
+            VStack(spacing: 0) {
+                Text(format(value)).font(.system(.title3, design: .rounded).weight(.semibold).monospacedDigit())
+                Text(title).font(.caption2).foregroundStyle(Theme.inkSecondary)
+            }
+            .frame(maxWidth: .infinity)
+            button("plus") { value = snap(value + step) }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func button(_ symbol: String, action: @escaping () -> Void) -> some View {
+        Button {
+            action()
+            UISelectionFeedbackGenerator().selectionChanged()
+        } label: {
+            Image(systemName: symbol).font(.subheadline.weight(.semibold)).frame(width: 34, height: 34)
+        }
+        .buttonStyle(.glass)
+        .buttonBorderShape(.circle)
     }
 }
 
@@ -310,6 +417,9 @@ struct PhoneRestPanel: View {
                 PhoneRestCountdown { dismiss() }
             } else {
                 Text("组间休息").font(.title3.weight(.semibold))
+                if timer.notificationsBlocked {
+                    NotificationOffHint()
+                }
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 10) {
                     ForEach(options, id: \.self) { s in
                         Button {
@@ -346,7 +456,7 @@ struct PhoneRestPanel: View {
             }
         }
         .padding(24)
-        .frame(maxHeight: .infinity, alignment: .top)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(PaperBackground())
     }
 

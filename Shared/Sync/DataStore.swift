@@ -20,7 +20,8 @@ struct DataStore {
                     sets: we.orderedSets.map { s in
                         SetDTO(id: s.id, order: s.order, weightKg: s.weightKg, reps: s.reps, durationSec: s.durationSec,
                                distanceM: s.distanceM, isWarmup: s.isWarmup, rpe: s.rpe, note: s.note,
-                               completedAt: s.completedAt, restSec: s.restSec, prKinds: s.prKindsRaw)
+                               completedAt: s.completedAt, restSec: s.restSec, prKinds: s.prKindsRaw,
+                               drops: s.drops.isEmpty ? nil : s.drops)
                     })
             })
     }
@@ -91,7 +92,7 @@ struct DataStore {
             for sd in ed.sets {
                 let s = SetEntry(id: sd.id, order: sd.order,
                                  values: SetValues(weightKg: sd.weightKg, reps: sd.reps, durationSec: sd.durationSec,
-                                                   distanceM: sd.distanceM, isWarmup: sd.isWarmup),
+                                                   distanceM: sd.distanceM, isWarmup: sd.isWarmup, drops: sd.drops ?? []),
                                  completedAt: sd.completedAt)
                 s.rpe = sd.rpe
                 s.note = sd.note

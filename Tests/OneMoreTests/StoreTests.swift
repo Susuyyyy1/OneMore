@@ -164,4 +164,19 @@ final class StoreTests: XCTestCase {
         XCTAssertTrue(changed.contains { $0.id == later.id })
         XCTAssertEqual(laterExercise.sets.first?.prKinds, [])
     }
+
+    func testDropSetPersistsAndSyncs() throws {
+        let w = makeWorkout(daysAgo: 0, sets: [SetValues(weightKg: 6, reps: 12, drops: [DropStage(weightKg: 3, reps: 12)])])
+        let set = try XCTUnwrap(w.exercises.first?.sets.first)
+        XCTAssertEqual(set.drops, [DropStage(weightKg: 3, reps: 12)])
+        XCTAssertEqual(w.volumeKg, 108, accuracy: 0.001)
+
+        let dto = DataStore(context: context).dto(w)
+        XCTAssertEqual(dto.exercises.first?.sets.first?.drops, [DropStage(weightKg: 3, reps: 12)])
+        let otherContainer = Persistence.makeContainer(inMemory: true)
+        let other = otherContainer.mainContext
+        XCTAssertTrue(DataStore(context: other).apply(dto))
+        let copied = try XCTUnwrap(other.fetch(FetchDescriptor<SetEntry>()).first)
+        XCTAssertEqual(copied.values.drops, [DropStage(weightKg: 3, reps: 12)])
+    }
 }

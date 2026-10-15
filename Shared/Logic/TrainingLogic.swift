@@ -1,5 +1,11 @@
 import Foundation
 
+/// 递减组里第一段之后的每一段（例如 6kg × 12 之后的 3kg × 12）
+struct DropStage: Equatable, Codable, Hashable {
+    var weightKg: Double?
+    var reps: Int?
+}
+
 /// 一组的数值（与存储无关，方便测试）
 struct SetValues: Equatable, Codable {
     var weightKg: Double?
@@ -7,6 +13,8 @@ struct SetValues: Equatable, Codable {
     var durationSec: Int?
     var distanceM: Double?
     var isWarmup: Bool = false
+    /// 递减组的后续各段；第一段就是上面的 weightKg / reps。整体算一组。
+    var drops: [DropStage] = []
 
     /// 有效的负重（0 视为没有负重）
     var loadKg: Double? {
@@ -145,11 +153,16 @@ enum Prefill {
 enum WorkoutStats {
     static func workingSetCount(_ sets: [SetValues]) -> Int { sets.filter { !$0.isWarmup }.count }
 
-    /// 总容量 = Σ 重量 × 次数（不含热身组）
+    /// 总容量 = Σ 重量 × 次数（不含热身组；递减组的每一段都算）
     static func volumeKg(_ sets: [SetValues]) -> Double {
         sets.reduce(0) { sum, s in
-            guard !s.isWarmup, let w = s.loadKg, let r = s.reps else { return sum }
-            return sum + w * Double(r)
+            guard !s.isWarmup else { return sum }
+            var v = 0.0
+            if let w = s.loadKg, let r = s.reps { v += w * Double(r) }
+            for d in s.drops {
+                if let w = d.weightKg, w > 0, let r = d.reps { v += w * Double(r) }
+            }
+            return sum + v
         }
     }
 }
@@ -195,8 +208,21 @@ enum Fmt {
         meters >= 1000 ? number(meters / 1000, maxFraction: 2) + "km" : number(meters, maxFraction: 0) + "m"
     }
 
-    /// 一组的简短描述，例如 “60kg × 10”、“× 12”、“+10kg × 8”、“1:00”、“20:00 · 3.5km”
+    /// 一组的简短描述，例如 “60kg × 10”、“× 12”、“+10kg × 8”、“1:00”、“20:00 · 3.5km”；
+    /// 递减组：“6kg × 12 → 3kg × 12”
     static func set(_ v: SetValues, logType: LogType, unit: WeightUnit) -> String {
+        let main = singleSet(v, logType: logType, unit: unit)
+        guard !v.drops.isEmpty, logType.usesReps else { return main }
+        let stages = v.drops.map { d -> String in
+            var parts: [String] = []
+            if let w = d.weightKg, w > 0 { parts.append(weight(w, unit: unit)) }
+            if let r = d.reps { parts.append("× \(r)") }
+            return parts.joined(separator: " ")
+        }
+        return ([main] + stages).joined(separator: " → ")
+    }
+
+    private static func singleSet(_ v: SetValues, logType: LogType, unit: WeightUnit) -> String {
         var parts: [String] = []
         let load = v.loadKg
         switch logType {
